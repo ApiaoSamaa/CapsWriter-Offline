@@ -49,8 +49,8 @@ def _check_tray_available() -> bool:
     if _tray_available is not None:
         return _tray_available
     
-    # 非 Windows 系统不支持
-    if platform.system() != 'Windows':
+    # 仅支持 Windows 和 macOS
+    if platform.system() not in ('Windows', 'Darwin'):
         _tray_available = False
         return False
     

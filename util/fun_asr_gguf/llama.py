@@ -176,18 +176,66 @@ def init_llama_lib():
         GGML_DLL = "ggml.dll"
         GGML_BASE_DLL = "ggml-base.dll"
         LLAMA_DLL = "llama.dll"
+        download_url = "https://github.com/ggml-org/llama.cpp/releases"
     elif sys.platform == "darwin":
         GGML_DLL = "libggml.dylib"
         GGML_BASE_DLL = "libggml-base.dylib"
         LLAMA_DLL = "libllama.dylib"
+        download_url = "https://github.com/ggml-org/llama.cpp/releases"
     else:
         GGML_DLL = "libggml.so"
         GGML_BASE_DLL = "libggml-base.so"
         LLAMA_DLL = "libllama.so"
+        download_url = "https://github.com/ggml-org/llama.cpp/releases"
 
-    ggml = ctypes.CDLL(os.path.join(lib_dir, GGML_DLL))
-    ggml_base = ctypes.CDLL(os.path.join(lib_dir, GGML_BASE_DLL))
-    llama = ctypes.CDLL(os.path.join(lib_dir, LLAMA_DLL))
+    # 检查文件是否存在
+    ggml_path = os.path.join(lib_dir, GGML_DLL)
+    ggml_base_path = os.path.join(lib_dir, GGML_BASE_DLL)
+    llama_path = os.path.join(lib_dir, LLAMA_DLL)
+    
+    missing_files = []
+    if not os.path.exists(ggml_path):
+        missing_files.append(GGML_DLL)
+    if not os.path.exists(ggml_base_path):
+        missing_files.append(GGML_BASE_DLL)
+    if not os.path.exists(llama_path):
+        missing_files.append(LLAMA_DLL)
+    
+    if missing_files:
+        error_msg = (
+            f"\n{'='*70}\n"
+            f"缺少 llama.cpp 二进制库文件 ({sys.platform}):\n"
+            f"  缺失文件: {', '.join(missing_files)}\n"
+            f"  预期位置: {lib_dir}\n\n"
+            f"请从以下地址下载对应平台的预编译二进制文件:\n"
+            f"  {download_url}\n\n"
+            f"macOS 用户请下载 'llama-*-bin-macos-*.zip'\n"
+            f"解压后将 .dylib 文件放入: {lib_dir}\n"
+            f"{'='*70}\n"
+        )
+        logger.error(error_msg)
+        raise FileNotFoundError(error_msg)
+
+    try:
+        ggml = ctypes.CDLL(ggml_path)
+        ggml_base = ctypes.CDLL(ggml_base_path)
+        llama = ctypes.CDLL(llama_path)
+    except OSError as e:
+        error_msg = (
+            f"\n{'='*70}\n"
+            f"无法加载 llama.cpp 库文件:\n"
+            f"  错误: {e}\n"
+            f"  平台: {sys.platform}\n"
+            f"  库目录: {lib_dir}\n\n"
+            f"可能的原因:\n"
+            f"  1. 库文件不兼容当前系统\n"
+            f"  2. 缺少依赖库\n"
+            f"  3. 需要重新编译或下载正确版本\n\n"
+            f"请访问: {download_url}\n"
+            f"{'='*70}\n"
+        )
+        logger.error(error_msg)
+        raise RuntimeError(error_msg) from e
 
     # 设置日志回调
     LOG_CALLBACK = ctypes.CFUNCTYPE(None, ctypes.c_int, ctypes.c_char_p, ctypes.c_void_p)

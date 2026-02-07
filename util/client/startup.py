@@ -65,7 +65,10 @@ def _setup_tray(state, base_dir):
             copy_to_clipboard(text)
 
     import os
-    icon_path = os.path.join(base_dir, 'assets', 'icon.ico')
+    from platform import system
+    # macOS 使用 PNG，Windows 使用 ICO
+    icon_filename = 'icon.png' if system() == 'Darwin' else 'icon.ico'
+    icon_path = os.path.join(base_dir, 'assets', icon_filename)
     enable_min_to_tray(
         'CapsWriter Client',
         icon_path,

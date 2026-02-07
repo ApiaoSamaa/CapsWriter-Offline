@@ -71,7 +71,10 @@ def setup_tray():
     """启用托盘图标"""
     if Config.enable_tray:
         from util.server.ui import enable_min_to_tray
-        icon_path = os.path.join(BASE_DIR, 'assets', 'icon.ico')
+        from platform import system
+        # macOS 使用 PNG，Windows 使用 ICO
+        icon_filename = 'icon.png' if system() == 'Darwin' else 'icon.ico'
+        icon_path = os.path.join(BASE_DIR, 'assets', icon_filename)
         enable_min_to_tray('CapsWriter Server', icon_path, exit_callback=request_exit_from_tray)
         logger.info("托盘图标已启用")
 

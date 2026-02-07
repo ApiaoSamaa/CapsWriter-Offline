@@ -1,8 +1,7 @@
-
 import asyncio
 import sys 
 import os 
-from multiprocessing import Process, Manager
+from multiprocessing import Process, Manager, set_start_method, get_start_method
 import queue
 from util.server.server_cosmic import Cosmic, console
 from util.server.server_init_recognizer import init_recognizer
@@ -20,12 +19,34 @@ def start_recognizer_process():
     state = get_state()
     Cosmic.sockets_id = Manager().list()
     stdin_fn = sys.stdin.fileno()
-    recognize_process = Process(target=init_recognizer,
-                                args=(Cosmic.queue_in,
-                                      Cosmic.queue_out,
-                                      Cosmic.sockets_id, 
-                                      stdin_fn),
-                                daemon=False)
+    
+    # 在 Apple Silicon 上使用 x86_64 库时，强制使用 spawn 模式
+    # 并设置正确的 Python 可执行文件路径
+    import platform
+    if platform.system() == 'Darwin' and platform.machine() == 'arm64':
+        try:
+            # 仅在主进程中设置一次
+            if get_start_method(allow_none=True) is None:
+                set_start_method('spawn', force=True)
+                logger.info("已设置 multiprocessing 为 spawn 模式")
+        except RuntimeError:
+            pass  # 已经设置过
+        
+        # 设置子进程使用 Rosetta 运行
+        import multiprocessing
+        # 获取当前 Python 的路径，通过 arch -x86_64 包装
+        python_path = sys.executable
+        multiprocessing.set_executable(f'arch -x86_64 {python_path}')
+        logger.info(f"子进程将通过 Rosetta 启动: arch -x86_64 {python_path}")
+    
+    recognize_process = Process(
+        target=init_recognizer,
+        args=(Cosmic.queue_in,
+              Cosmic.queue_out,
+              Cosmic.sockets_id, 
+              stdin_fn),
+        daemon=False
+    )
     recognize_process.start()
     state.recognize_process = recognize_process
     logger.info("识别子进程已启动")
@@ -42,26 +63,27 @@ def start_recognizer_process():
             else:
                 break
         except (InterruptedError, OSError) as e:
-            # 处理被信号中断的情况 (Errno 4 Interrupted function call)
-            # 这通常发生在 Anti-Shake 触发时 (第一次 Ctrl+C)
             if isinstance(e, InterruptedError) or e.errno == errno.EINTR:
                 continue
             raise
 
     # 检查子进程是否存活
     if not recognize_process.is_alive():
-        logger.error("识别子进程意外退出（可能是因为模型文件缺失或加载失败）")
-        # 退出码不为0，说明可能出错
-        if recognize_process.exitcode != 0:
-            logger.error(f"子进程退出码: {recognize_process.exitcode}")
+        exitcode = recognize_process.exitcode
+        logger.error(f"识别子进程意外退出，退出码: {exitcode}")
+        console.print(f'[red bold]✗ 识别子进程启动失败 (退出码: {exitcode})')
+        console.print('[yellow]请检查以下可能原因：')
+        console.print('[yellow]  1. 模型文件缺失或损坏')
+        console.print('[yellow]  2. llama.cpp 库文件不匹配当前系统架构')
+        console.print('[yellow]  3. 内存不足或其他系统资源问题')
+        console.print('[yellow]  4. Python 环境架构与库文件不匹配 (x86_64 vs arm64)')
         
-        # 主动抛出异常或直接退出
         lifecycle.request_shutdown()
+        raise RuntimeError(f"识别子进程启动失败 (退出码: {exitcode})")
 
     if lifecycle.is_shutting_down:
         logger.warning("在加载模型时收到退出请求")
         recognize_process.terminate()
-        # 不再抛出异常，而是优雅返回，由外层 lifecycle 状态决定流程
         return recognize_process
 
     logger.info("模型加载完成，开始服务")

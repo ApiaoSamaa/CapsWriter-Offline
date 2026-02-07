@@ -5,13 +5,19 @@
 处理按键名称和虚拟键码之间的转换，以及相关常量定义
 """
 
+import platform
 from pynput import keyboard
-from pynput._util.win32 import KeyTranslator
 from . import logger
 
-
-# 创建键盘翻译器实例（用于 VK 到字符的转换）
-_key_translator = KeyTranslator()
+# Windows 特定导入
+_key_translator = None
+if platform.system() == 'Windows':
+    try:
+        from pynput._util.win32 import KeyTranslator
+        # 创建键盘翻译器实例（用于 VK 到字符的转换）
+        _key_translator = KeyTranslator()
+    except ImportError:
+        logger.warning("无法导入 Windows 特定模块，部分功能将不可用")
 
 # 特殊键 VK 映射（从 pynput 复制）
 _SPECIAL_KEYS = {
@@ -106,12 +112,13 @@ class KeyMapper:
             return NUMPAD_KEYS[vk]
 
         # 使用 pynput 的 KeyTranslator 获取字符（字母、数字、符号键）
-        try:
-            params = _key_translator(vk, is_press=True)
-            if 'char' in params and params['char'] is not None:
-                return params['char']
-        except Exception:
-            pass
+        if _key_translator is not None:
+            try:
+                params = _key_translator(vk, is_press=True)
+                if 'char' in params and params['char'] is not None:
+                    return params['char']
+            except Exception:
+                pass
 
         # 未知键码，返回 vk_ 格式
         return f'vk_{vk}'

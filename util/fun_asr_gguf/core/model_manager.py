@@ -84,28 +84,36 @@ class ModelManager:
         self._apply_vulkan_config()
         
         # 1. ONNX
-        vprint("[1/6] 加载 ONNX 模型...", verbose)
+        vprint("[1/6] 加载 ONNX 编码器模型...", verbose)
+        import sys
+        sys.stdout.flush()
         self.encoder_sess, self.ctc_sess, _ = load_onnx_models(
             self.config.encoder_onnx_path,
             self.config.ctc_onnx_path,
             dml_enable=self.config.dml_enable
         )
+        vprint("      ✓ ONNX 模型加载完成", verbose)
 
         # 2. GGUF
-        vprint("[2/6] 加载 GGUF LLM Decoder...", verbose)
+        vprint("[2/6] 加载 GGUF LLM Decoder（较慢，请耐心等待）...", verbose)
+        sys.stdout.flush()
         self.model = llama.LlamaModel(self.config.decoder_gguf_path, n_gpu_layers=-1)
         if not self.model.ptr:
             gguf_load_fail()
+        vprint("      ✓ GGUF 模型加载完成", verbose)
         
         self.vocab = self.model.vocab
         self.eos_token = self.model.eos_token
 
         # 3. Embeddings
         vprint("[3/6] 加载 Embedding 权重...", verbose)
+        sys.stdout.flush()
         self.embedding_table = llama.get_token_embeddings_gguf(self.config.decoder_gguf_path)
+        vprint("      ✓ Embedding 加载完成", verbose)
         
         # 4. Context
         vprint("[4/6] 创建 LLM 上下文...", verbose)
+        sys.stdout.flush()
         self.ctx = llama.LlamaContext(
             self.model,
             n_ctx=2048,
@@ -114,14 +122,18 @@ class ModelManager:
             n_threads=self.config.n_threads,
             n_threads_batch=self.config.n_threads_batch
         )
+        vprint("      ✓ 上下文创建完成", verbose)
         
         # 5. CTC & Prompt
         vprint("[5/6] 加载 CTC 词表与 Prompt 构建器...", verbose)
+        sys.stdout.flush()
         self.ctc_id2token = load_ctc_tokens(self.config.tokens_path)
         self.prompt_builder = PromptBuilder(self.vocab, self.embedding_table)
+        vprint("      ✓ CTC 和 Prompt 加载完成", verbose)
 
         # 6. Hotwords
         vprint("[6/6] 初始化热词管理器...", verbose)
+        sys.stdout.flush()
         hw_path = self.config.hotwords_path
         if not hw_path:
             # 默认逻辑
