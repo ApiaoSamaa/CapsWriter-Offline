@@ -20,25 +20,6 @@ def start_recognizer_process():
     Cosmic.sockets_id = Manager().list()
     stdin_fn = sys.stdin.fileno()
     
-    # 在 Apple Silicon 上使用 x86_64 库时，强制使用 spawn 模式
-    # 并设置正确的 Python 可执行文件路径
-    import platform
-    if platform.system() == 'Darwin' and platform.machine() == 'arm64':
-        try:
-            # 仅在主进程中设置一次
-            if get_start_method(allow_none=True) is None:
-                set_start_method('spawn', force=True)
-                logger.info("已设置 multiprocessing 为 spawn 模式")
-        except RuntimeError:
-            pass  # 已经设置过
-        
-        # 设置子进程使用 Rosetta 运行
-        import multiprocessing
-        # 获取当前 Python 的路径，通过 arch -x86_64 包装
-        python_path = sys.executable
-        multiprocessing.set_executable(f'arch -x86_64 {python_path}')
-        logger.info(f"子进程将通过 Rosetta 启动: arch -x86_64 {python_path}")
-    
     recognize_process = Process(
         target=init_recognizer,
         args=(Cosmic.queue_in,
